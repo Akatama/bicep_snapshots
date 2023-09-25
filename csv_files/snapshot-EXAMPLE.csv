@@ -1,0 +1,3 @@
+src_vm_name,src_subscription,src_rg,src_snapshot_rg,src_region,tgt_suffix,tgt_subscription,tgt_vm_rg,tgt_vnet,tgt_subnet,tgt_vnet_rg,tgt_region
+PROD-JOB01,<source_sub>,prod-automation-sg,snapshotRG,Central US,tgt,<tgt_sub>,prod-dr-automation,vnet-shared-drbubble-eastus2,snet-app-firstparty,prod-vnet-dr-automation,US East 2
+PROD-JOB02,<source_sub>,prod-automation-sg,snapshotRG,Central US,tgt,<tgt_sub>,prod-dr-automation,vnet-shared-drbubble-eastus2,snet-app-firstparty,prod-vnet-dr-automation,US East 2

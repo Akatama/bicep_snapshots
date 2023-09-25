@@ -10,6 +10,9 @@ var snapshotDataName = '${snapshotName}-Data'
 resource sourceSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
   location: snapShotLocation
   name: snapshotOSName
+  sku: {
+    name: 'Standard_ZRS'
+  }
   tags: {
     snapshotTest: 'OS'
     snapshotType: 'source'
@@ -27,6 +30,9 @@ resource sourceSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
 resource sourceSnapshotDataDisk 'Microsoft.Compute/snapshots@2023-01-02' = [for (dataDisk, i) in vmToSnapShot.properties.storageProfile.dataDisks : {
   location: snapShotLocation
   name: '${snapshotDataName}-${i}'
+  sku: {
+    name: 'Standard_ZRS'
+  }
   tags: {
     snapshotTest: 'Data'
     snapshotType: 'source'
