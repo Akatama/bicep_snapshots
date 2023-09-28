@@ -27,7 +27,7 @@ resource sourceSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
   } 
 }
 
-resource sourceSnapshotDataDisk 'Microsoft.Compute/snapshots@2023-01-02' = [for (dataDisk, i) in vmToSnapShot.properties.storageProfile.dataDisks : {
+resource sourceSnapshotDataDisks 'Microsoft.Compute/snapshots@2023-01-02' = [for (dataDisk, i) in vmToSnapShot.properties.storageProfile.dataDisks : {
   location: snapShotLocation
   name: '${snapshotDataName}-${i}'
   sku: {
@@ -49,4 +49,4 @@ resource sourceSnapshotDataDisk 'Microsoft.Compute/snapshots@2023-01-02' = [for 
 
 output sourceOSSnapshotID string = sourceSnapshotOSDisk.id
 
-output sourceDataSnapshotIDs array = [ for i in range (0, length(vmToSnapShot.properties.storageProfile.dataDisks)) : sourceSnapshotDataDisk[i].id]
+output sourceDataSnapshotIDs array = [ for i in range (0, length(vmToSnapShot.properties.storageProfile.dataDisks)) : sourceSnapshotDataDisks[i].id]

@@ -2,12 +2,12 @@ param sourceOSSnapshotID string
 
 param sourceDataSnapshotIDs array
 
-param location string
+param targetLocation string
 
 param targetSnapshotName string
 
 resource targetSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
-  location: location
+  location: targetLocation
   name: '${targetSnapshotName}-OS'
   sku: {
     name: 'Standard_ZRS'
@@ -28,7 +28,7 @@ resource targetSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
 
 
 resource targetSnapshotDataDisks 'Microsoft.Compute/snapshots@2023-01-02' = [for (dataSnapShotID, i) in sourceDataSnapshotIDs : {
-  location:location
+  location: targetLocation
   name: '${targetSnapshotName}-Data-${i}'
   sku: {
     name: 'Standard_ZRS'

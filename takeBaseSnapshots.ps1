@@ -2,7 +2,7 @@
 .Description
     Snaptshot a the SFPT server's OS and Data disks
 .Example
-    ./snapshotSFTP.ps1 -CsvPath relative/path/to/you/CSV
+    ./takeBaseSnapshots.ps1 -CsvRelativePath relative/path/to/you/CSV
 #>
 [CmdletBinding()]
 param (
@@ -17,13 +17,23 @@ if(!$csvFileResult)
     exit
 }
 
-$bicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/snapshotThenCopy.bicep"
-$bicepResult = Test-Path $bicepPath
-if(!$bicepResult)
+$sourceSnapshotsBicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/sourceSnapshot.bicep"
+$sourceSnapshotsBicepResult = Test-Path $sourceSnapshotsBicepPath 
+if(!$sourceSnapshotsBicepResult)
 {
-    Write-Host "Path ${bicepPath} not found!"
+    Write-Host "Path ${sourceSnapshotsBicepPath} not found!"
     exit
 }
+
+$targetSnapshotsBicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/targetSnapshot.bicep"
+$targetSnapshotsBicepResult = Test-Path $targetSnapshotsBicepPath
+if(!$targetSnapshotsBicepResult)
+{
+    Write-Host "Path ${targetSnapshotsBicepPath} not found!"
+    exit
+}
+
+
 
 Import-Csv -Path $csvFilePath | ForEach-Object {
     $SourceResourceGroupName = $_.src_rg
@@ -39,15 +49,39 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     $TargetVNetResourceGroupName = $_.tgt_vnet_rg
     $TargetSubnetName = $_.tgt_subnet
 
-
-
     $ResourceBaseName = $SourceVMName
 
     $targetVmName = "${ResourceBaseName}-tgt"
 
-    Write-Host "${TargetResourceGroupName}"
+    $sourceSnapshotDeploymentName = "source-${ResourceBaseName}-snapshots"
 
-    az deployment group create --resource-group $TargetResourceGroupName --name "${ResourceBaseName}-base" `
-        --template-file $bicepPath --parameters SourceSubName=$SourceSubscriptionName SourceLocation=$SourceLocation TargetLocation=$TargetLocation SourceResourceGroupName=$SourceResourceGroupName `
-        SourceVMName=$SourceVMName SourceSnapshotResourceGroupName=$SourceSnapshotResourceGroupName
+    $targetSnapshotDeploymentName = "target-${ResourceBaseName}-snapshots"
+
+    az account set --subscription $SourceSubscriptionName
+
+    az deployment group create --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --template-file $sourceSnapshotsBicepPath --parameters SourceLocation=$SourceLocation SourceVMName=$SourceVMName `
+        SourceSnapshotResourceGroupName=$SourceSnapshotResourceGroupName BaseSnapshotName=$ResourceBaseName
+
+    $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --query properties.outputs.sourceOSSnapshotID.value
+    $sourceDataSnapshotIDs = "["
+    $snapshotIds = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --query properties.outputs.sourceDataSnapshotIDs.value 
+    $snapshotIds | ForEach-Object {
+        if ($_ -ne "[" -and $_ -ne "]")
+        {
+            $dataDiskId = $_.trim().trim(",", "`"")
+            $dataDiskId = -join("`'", $dataDiskId, "`'", ",")
+            $sourceDataSnapshotIDs = -join($sourceDataSnapshotIDs, $dataDiskId)
+        }
+    }
+    $sourceDataSnapshotIDs = $sourceDataSnapshotIDs.trim(",")
+    $sourceDataSnapshotIDs = -join($sourceDataSnapshotIDs, "]")
+
+    az account set --subscription $TargetSubscriptionName
+
+    az deployment group create --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
+        --template-file $targetSnapshotsBicepPath --parameters TargetLocation=$TargetLocation SourceOSSnapshotID=$sourceOSSnapshotID `
+        SourceDataSnapshotIDs=$sourceDataSnapshotIDs BaseSnapshotName=$ResourceBaseName
 }
