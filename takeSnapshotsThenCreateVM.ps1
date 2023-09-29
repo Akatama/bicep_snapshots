@@ -1,9 +1,11 @@
 <#
 .Description
-    Take a base snapshot of a set of virtual machine's OS and data disks
-    Then copies them to another subscription/region/resource group
+    Takes a snapshot of all of the VM's OS and Data disks
+    Then copies them to another Subscription, Region and Resource Group
+    Then waits for the snapshots to hydrate and creates disks from them
+    Then re-creates the VM
 .Example
-    ./takeBaseSnapshots.ps1 -CsvRelativePath relative/path/to/you/CSV
+    ./takeSnapshotsThenCreateVM.ps1 -CsvRelativePath relative/path/to/you/CSV
 #>
 [CmdletBinding()]
 param (
@@ -46,14 +48,21 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     $TargetResourceGroupName = $_.tgt_vm_rg
     $TargetSubscriptionName = $_.tgt_subscription
     $TargetLocation = $_.tgt_region
+    $TargetVNetName = $_.tgt_vnet
+    $TargetVNetResourceGroupName = $_.tgt_vnet_rg
+    $TargetSubnetName = $_.tgt_subnet
 
-    $ResourceBaseName = "${SourceVMName}-base"
+    $ResourceBaseName = "${SourceVMName}"
+
+    $targetVmName = "${SourceVMName}-tgt"
 
 
-    $sourceSnapshotDeploymentName = "source-${SourceVMName}-snapshots-base"
+    $sourceSnapshotDeploymentName = "source-${SourceVMName}-snapshots"
 
-    $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots-base"
+    $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots"
 
+    Start-Sleep 120
+    
     az account set --subscription $SourceSubscriptionName
 
     az deployment group create --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
@@ -81,4 +90,45 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     az deployment group create --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
         --template-file $targetSnapshotsBicepPath --parameters TargetLocation=$TargetLocation SourceOSSnapshotID=$sourceOSSnapshotID `
         SourceDataSnapshotIDs=$sourceDataSnapshotIDs BaseSnapshotName=$ResourceBaseName
+
+    $targetSnapshotOSName = az deployment group show --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
+        --query properties.outputs.targetOSSnapshotName.value
+
+    $dataNames = az deployment group show --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
+        --query properties.outputs.targetDataSnapshotNames.value
+    
+    $targetSnapshotDataNames = @()
+    
+    $dataNames | ForEach-Object {
+        if($_ -ne "[" -and $_ -ne "]")
+        {
+            $dataDiskName = $_.trim().trim(",", "`"")
+            $targetSnapshotDataNames += $dataDiskName
+        }
+    }
+
+    $targetOSSnapshotCompletionPercent = az snapshot show --name $targetSnapshotOSName --resource-group $TargetResourceGroupName `
+        --query completionPercent
+    while($targetOSSnapshotCompletionPercent -ne "100.0")
+    {
+        Write-Output "Waiting 30 seconds for ${targetSnapshotOSName}"
+        Start-Sleep -Seconds 30
+        $targetOSSnapshotCompletionPercent = az snapshot show --name $targetSnapshotOSName --resource-group $TargetResourceGroupName `
+            --query completionPercent
+    }
+
+    $targetSnapshotDataNames | ForEach-Object {
+        $dataSnapshotCompletionPerccent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
+            --query completionPercent
+        while($dataSnapshotCompletionPerccent -ne "100.0")
+        {
+            Write-Output "Waiting 30 seconds for ${$_}"
+            Start-Sleep -Seconds 30
+            $dataSnapshotCompletionPerccent = az snapshot show --name $targetSnapshotOSName --resource-group $TargetResourceGroupName `
+                --query completionPercent
+        }
+    }
+
+
+
 }

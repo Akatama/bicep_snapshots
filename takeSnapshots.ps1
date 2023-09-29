@@ -1,9 +1,12 @@
 <#
 .Description
-    Take a base snapshot of a set of virtual machine's OS and data disks
+    Take a consistent snapshot of a set of virtual machine's OS and data disks
     Then copies them to another subscription/region/resource group
+    The way this is currently written, it expects one snapshot to be taken a day per disk
+    However, the script will work even if the snapshots are taken less frequently
+    More frequently and the script will need to be reworked
 .Example
-    ./takeBaseSnapshots.ps1 -CsvRelativePath relative/path/to/you/CSV
+    ./takeSnapshot.ps1 -CsvRelativePath relative/path/to/you/CSV
 #>
 [CmdletBinding()]
 param (
@@ -47,12 +50,14 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     $TargetSubscriptionName = $_.tgt_subscription
     $TargetLocation = $_.tgt_region
 
-    $ResourceBaseName = "${SourceVMName}-base"
+    $date = (Get-Date).ToString("yyyyMMdd");
+
+    $ResourceBaseName = "${SourceVMName}-${date}"
 
 
-    $sourceSnapshotDeploymentName = "source-${SourceVMName}-snapshots-base"
+    $sourceSnapshotDeploymentName = "source-${SourceVMName}-snapshots-${date}"
 
-    $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots-base"
+    $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots-${date}"
 
     az account set --subscription $SourceSubscriptionName
 

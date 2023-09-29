@@ -51,6 +51,6 @@ resource targetSnapshotDataDisks 'Microsoft.Compute/snapshots@2023-01-02' = [for
   }
 }]
 
-output targetOSSnapshotID string = targetSnapshotOSDisk.id
+output targetOSSnapshotName string = targetSnapshotOSDisk.name
 
-output targetDataSnapshotIDs array = [ for i in range (0, length(SourceDataSnapshotIDs)) : targetSnapshotDataDisks[i].id]
+output targetDataSnapshotNames array = [ for i in range (0, length(SourceDataSnapshotIDs)) : targetSnapshotDataDisks[i].name]
