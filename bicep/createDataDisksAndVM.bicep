@@ -2,23 +2,25 @@ param virtualMachineName string
 
 param vmSize string
 
-param targetOSDiskName string
-
 param location string = 'East US 2'
 
-param targetOSSnapshotName string
+param osDiskName string
 
-param sourceOSDiskSizeinGB int
+//combine these three into an object
+param osSnapshotName string
 
-param sourceOSDiskSkuName string
+param osDiskSizeinGB int
 
-param targetDataSnapshotNames array
+param osDiskSkuName string
 
-param targetDataDiskName string
+// combine these three into an object
+param dataSnapshotNames array
 
-param sourceDataDisksSinzeinGB array
+param dataDiskName string
 
-param sourceDataDisksSkuName array
+param dataDisksSizeinGB array
+
+param dataDisksSkuName array
 
 param targetVnetName string
 
@@ -26,49 +28,51 @@ param targetSubnetName string
 
 param targetVNetResourceGroupName string
 
-resource osSnapshot 'Microsoft.Compute/snapshots@2023-04-02' existing = {
-  name: targetOSSnapshotName
+resource osSnapshot 'Microsoft.Compute/snapshots@2023-01-02' existing = {
+  name: osSnapshotName
 }
 
-resource dataSnapshots 'Microsoft.Compute/snapshots@2023-04-02' existing = [for dataSnapshotName in targetDataSnapshotNames : {
+resource dataSnapshots 'Microsoft.Compute/snapshots@2023-01-02' existing = [for dataSnapshotName in dataSnapshotNames : {
   name: dataSnapshotName
 }]
 
-resource subnet 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = {
+resource subnet 'Microsoft.Network/virtualNetworks/subnets@2023-02-01' existing = {
   name: targetSubnetName
+  scope: resourceGroup(targetVNetResourceGroupName)
 }
 
 resource osDisk 'Microsoft.Compute/disks@2023-04-02' = {
-  name : targetOSDiskName
+  name : osDiskName
   location: location
   sku: {
-    name: sourceOSDiskSkuName
+    name: osDiskSkuName 
   }
   properties: {
     creationData: {
       createOption: 'Copy'
       sourceResourceId: osSnapshot.id
     }
-    diskSizeGB: sourceOSDiskSizeinGB
+    diskSizeGB: osDiskSizeinGB
   }
 }
 
-resource dataDisks 'Microsoft.Compute/disks@2023-04-02' = [for i in range(0, length(dataSnapshots)) : {
-  name : '${targetDataDiskName }-Data-${i}'
+resource dataDisks 'Microsoft.Compute/disks@2023-04-02' = [for i in range(0, length(dataSnapshotNames)) : {
+  name : '${dataDiskName}${i}'
   location: location
   sku: {
-    name: sourceDataDisksSkuName[i]
+    name: dataDisksSkuName[i]
   }
   properties: {
     creationData: {
       createOption: 'Copy'
       sourceResourceId: dataSnapshots[i].id
     }
-    diskSizeGB: sourceDataDisksSinzeinGB[i]
+    diskSizeGB: dataDisksSizeinGB[i]
   }
 }]
 
 resource createdVirtualMachine 'Microsoft.Compute/virtualMachines@2023-07-01' = {
+  dependsOn: [dataDisks]
   name: virtualMachineName
   location: location
   properties: {
@@ -96,7 +100,7 @@ resource createdVirtualMachine 'Microsoft.Compute/virtualMachines@2023-07-01' = 
     }
     storageProfile: {
       osDisk: osDisk
-      dataDisks: [for i in range(0, length(dataDisks)) : {
+      dataDisks: [for i in range(0, length(dataSnapshotNames)) : {
         createOption: 'Attach'
         lun: i
         managedDisk: {

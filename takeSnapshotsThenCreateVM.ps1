@@ -12,6 +12,9 @@ param (
     [Parameter(Mandatory=$true)][string]$CsvRelativePath
 )
 
+## Internal Functions
+. (Join-Path $PSScriptRoot functions.ps1)
+
 $csvFilePath = Join-Path -Path $PSScriptRoot -ChildPath $CsvRelativePath
 $csvFileResult = Test-Path $csvFilePath
 if(!$csvFileResult)
@@ -33,6 +36,14 @@ $targetSnapshotsBicepResult = Test-Path $targetSnapshotsBicepPath
 if(!$targetSnapshotsBicepResult)
 {
     Write-Host "Path ${targetSnapshotsBicepPath} not found!"
+    exit
+}
+
+$targetCreateVMBicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/createDataDisksAndVM.bicep"
+$targetCreateVMBicepPathResult = Test-Path $targetCreateVMBicepPath
+if(!$targetCreateVMBicepPathResult)
+{
+    Write-Host "Path ${$targetCreateVMBicepPath} not found!"
     exit
 }
 
@@ -71,19 +82,10 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
 
     $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceOSSnapshotID.value
-    $sourceDataSnapshotIDs = "["
     $snapshotIds = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceDataSnapshotIDs.value 
-    $snapshotIds | ForEach-Object {
-        if ($_ -ne "[" -and $_ -ne "]")
-        {
-            $dataDiskId = $_.trim().trim(",", "`"")
-            $dataDiskId = -join("`'", $dataDiskId, "`'", ",")
-            $sourceDataSnapshotIDs = -join($sourceDataSnapshotIDs, $dataDiskId)
-        }
-    }
-    $sourceDataSnapshotIDs = $sourceDataSnapshotIDs.trim(",")
-    $sourceDataSnapshotIDs = -join($sourceDataSnapshotIDs, "]")
+    
+    $sourceDataSnapshotIDs = ConvertTo-BicepArray -ArrayToConvert $snapshotIds
 
     az account set --subscription $TargetSubscriptionName
 
@@ -118,17 +120,26 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     }
 
     $targetSnapshotDataNames | ForEach-Object {
-        $dataSnapshotCompletionPerccent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
+        $dataSnapshotCompletionPercent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
             --query completionPercent
-        while($dataSnapshotCompletionPerccent -ne "100.0")
+        while($dataSnapshotCompletionPercent -ne "100.0")
         {
             Write-Output "Waiting 30 seconds for ${$_}"
             Start-Sleep -Seconds 30
-            $dataSnapshotCompletionPerccent = az snapshot show --name $targetSnapshotOSName --resource-group $TargetResourceGroupName `
+            $dataSnapshotCompletionPercent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
                 --query completionPercent
         }
     }
 
+    $dataSnapshotNamesBicep = ConvertTo-BicepArray $targetSnapshotDataNames
 
+    $dataDisksSizeInGB = @(32, 32, 64) | ConvertTo-BicepArray
+
+    az deployment group create --resource-group $TargetResourceGroupName --name "${targetVmName}-deploy" --template-file $targetCreateVMBicepPath `
+        --parameters virtualMachineName=$targetVmName vmSize="Standard_DS1_v2" targetOSDiskName=$targetSnapshotOSName `
+        targetOSSnapshotName=$targetSnapshotOSName sourceOSDiskSizeinGB=127 sourceOSDiskSkuName="Premium_LRS" `
+        targetDataSnapshotNames=$dataSnapshotNamesBicep targetDataDiskName=$ResourceBaseName sourceDataDisksSinzeinGB=$dataDisksSizeInGB `
+        sourceDataDisksSkuName="Premium_LRS" targetVnetName=$TargetVNetName targetSubnetName=$TargetSubnetName `
+        targetVNetResourceGroupName=$TargetVNetResourceGroupName
 
 }
