@@ -71,8 +71,6 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     $sourceSnapshotDeploymentName = "source-${SourceVMName}-snapshots"
 
     $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots"
-
-    Start-Sleep 120
     
     az account set --subscription $SourceSubscriptionName
 
@@ -82,10 +80,25 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
 
     $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceOSSnapshotID.value
-    $snapshotIds = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --query properties.outputs.sourceDataSnapshotIDs.value 
-    
-    $sourceDataSnapshotIDs = ConvertTo-BicepArray -ArrayToConvert $snapshotIds
+    $dataSnapshotIds = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --query properties.outputs.sourceDataSnapshotIDs.value
+    $vmSize = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --query properties.outputs.vmSize.value
+    $osDiskSizeinGB = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --query properties.outputs.osDiskSizeinGB.value
+    $osDiskSkuName = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+        --query properties.outputs.osDiskSkuName.value
+
+    $sourceDataSnapshotIDs = ConvertTo-BicepArray -ArrayToConvert $dataSnapshotIds
+
+    # $vm = az vm show --resource-group $SourceResourceGroupName --name $SourceVMName
+    # $dataDiskNames = @()
+    # $vm
+    # $dataDisksSizeInGB = @()
+    # $dataDisksSkuName = @()
+
+
+    Start-Sleep 120
 
     az account set --subscription $TargetSubscriptionName
 
@@ -132,14 +145,11 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     }
 
     $dataSnapshotNamesBicep = ConvertTo-BicepArray $targetSnapshotDataNames
-
-    $dataDisksSizeInGB = @(32, 32, 64) | ConvertTo-BicepArray
+    $dataDisksSizeInGBBicep = ConvertTo-BicepArray $dataDisksSizeInGB
+    $dataDisksSkuNameBicep = ConvertTo-BicepArray $dataDisksSkuName
 
     az deployment group create --resource-group $TargetResourceGroupName --name "${targetVmName}-deploy" --template-file $targetCreateVMBicepPath `
-        --parameters virtualMachineName=$targetVmName vmSize="Standard_DS1_v2" targetOSDiskName=$targetSnapshotOSName `
-        targetOSSnapshotName=$targetSnapshotOSName sourceOSDiskSizeinGB=127 sourceOSDiskSkuName="Premium_LRS" `
-        targetDataSnapshotNames=$dataSnapshotNamesBicep targetDataDiskName=$ResourceBaseName sourceDataDisksSinzeinGB=$dataDisksSizeInGB `
-        sourceDataDisksSkuName="Premium_LRS" targetVnetName=$TargetVNetName targetSubnetName=$TargetSubnetName `
-        targetVNetResourceGroupName=$TargetVNetResourceGroupName
-
+    --parameters virtualMachineName=$targetVmName vmSize=$vmSize osSnapshotName=$targetSnapshotOSName osDiskSizeinGB=$osDiskSizeinGB `
+    osDiskSkuName=$osDiskSkuName dataSnapshotNames=$dataSnapshotNamesBicep dataDisksSizeinGB=$dataDisksSizeInGBBicep `
+    dataDisksSkuName=$dataDisksSkuNameBicep vnetName=$TargetVNetName subnetName=$TargetSubnetName vnetRG=$TargetVNetResourceGroupName
 }

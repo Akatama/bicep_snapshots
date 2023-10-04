@@ -26,3 +26,5 @@ module sourceSnapshots 'modules/snapshot.bicep' = {
 output sourceOSSnapshotID string = sourceSnapshots.outputs.sourceOSSnapshotID
 
 output sourceDataSnapshotIDs array = sourceSnapshots.outputs.sourceDataSnapshotIDs
+
+output vmSize string = vmToSnapShot.properties.hardwareProfile.vmSize

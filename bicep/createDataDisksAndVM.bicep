@@ -4,8 +4,6 @@ param vmSize string
 
 param location string = 'East US 2'
 
-param osDiskName string
-
 //combine these three into an object
 param osSnapshotName string
 
@@ -16,17 +14,15 @@ param osDiskSkuName string
 // combine these three into an object
 param dataSnapshotNames array
 
-param dataDiskName string
-
 param dataDisksSizeinGB array
 
 param dataDisksSkuName array
 
-param targetVnetName string
+param vnetName string
 
-param targetSubnetName string
+param subnetName string
 
-param targetVNetResourceGroupName string
+param vnetRG string
 
 resource osSnapshot 'Microsoft.Compute/snapshots@2023-01-02' existing = {
   name: osSnapshotName
@@ -36,10 +32,14 @@ resource dataSnapshots 'Microsoft.Compute/snapshots@2023-01-02' existing = [for 
   name: dataSnapshotName
 }]
 
-resource subnet 'Microsoft.Network/virtualNetworks/subnets@2023-02-01' existing = {
-  name: targetSubnetName
-  scope: resourceGroup(targetVNetResourceGroupName)
+resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-05-01' existing = {
+  name: vnetName
+  scope: resourceGroup(vnetRG)
 }
+
+var selectedSubnetId = first(filter(virtualNetwork.properties.subnets, x => x.name == subnetName)).id
+
+var osDiskName = '${virtualMachineName}-OS'
 
 resource osDisk 'Microsoft.Compute/disks@2023-04-02' = {
   name : osDiskName
@@ -57,7 +57,7 @@ resource osDisk 'Microsoft.Compute/disks@2023-04-02' = {
 }
 
 resource dataDisks 'Microsoft.Compute/disks@2023-04-02' = [for i in range(0, length(dataSnapshotNames)) : {
-  name : '${dataDiskName}${i}'
+  name : '${virtualMachineName}-Data-${i}'
   location: location
   sku: {
     name: dataDisksSkuName[i]
@@ -71,6 +71,24 @@ resource dataDisks 'Microsoft.Compute/disks@2023-04-02' = [for i in range(0, len
   }
 }]
 
+resource nic 'Microsoft.Network/networkInterfaces@2023-05-01' = {
+  name : '${virtualMachineName}-NIC'
+  location: location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          privateIPAllocationMethod: 'Dynamic'
+          subnet: {
+            id: selectedSubnetId
+          }
+        }
+      }
+    ]
+  }
+}
+
 resource createdVirtualMachine 'Microsoft.Compute/virtualMachines@2023-07-01' = {
   dependsOn: [dataDisks]
   name: virtualMachineName
@@ -80,33 +98,33 @@ resource createdVirtualMachine 'Microsoft.Compute/virtualMachines@2023-07-01' = 
       vmSize: vmSize
     }
     networkProfile: {
-      networkInterfaceConfigurations: [
+      networkInterfaces: [
         {
-          name: 'PrivateIP'
-          properties: {
-            ipConfigurations: [
-              {
-                name: 'subnet'
-                properties: {
-                  subnet: {
-                    id: subnet.id
-                  }
-                }
-              }
-            ]
-          }
+          id: nic.id
         }
       ]
     }
     storageProfile: {
-      osDisk: osDisk
+      osDisk: {
+        osType: 'Windows'
+        diskSizeGB: osDiskSizeinGB
+        managedDisk: {
+          id: osDisk.id
+        }
+        createOption: 'Attach'
+        name: osDiskName
+        
+      }
       dataDisks: [for i in range(0, length(dataSnapshotNames)) : {
         createOption: 'Attach'
+        diskSizeGB: dataDisksSizeinGB[i]
+        name: dataDisks[i].name
         lun: i
         managedDisk: {
           id: dataDisks[i].id
         }
       }]
     }
+
   }
 }
