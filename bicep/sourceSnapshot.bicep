@@ -1,25 +1,26 @@
 @description('First part of the name of the snapshot resources')
-param BaseSnapshotName string = 'snapshot'
+param baseSnapshotName string = 'snapshot'
 
-param SourceLocation string = 'Central US'
+param location string = 'Central US'
 
-param SourceSnapshotResourceGroupName string = 'SnapshotRG'
+param resourceGroupName string = 'SnapshotRG'
 
-param SourceVMName string = 'PROD-JOB01'
+@description('Name of the VM to snapshot the disks of')
+param sourceVMName string = 'PROD-JOB01'
 
-var SourceSnapshotName = 'source-${BaseSnapshotName}'
+var snapshotName = 'source-${baseSnapshotName}'
 
 resource vmToSnapShot 'Microsoft.Compute/virtualMachines@2023-03-01' existing = {
-  name : SourceVMName
+  name : sourceVMName
 }
 
 module sourceSnapshots 'modules/snapshot.bicep' = {
-  name: SourceSnapshotName
-  scope: resourceGroup(SourceSnapshotResourceGroupName)
+  name: snapshotName
+  scope: resourceGroup(resourceGroupName)
   params: {
-    snapshotName: SourceSnapshotName
+    snapshotName: snapshotName
     vmToSnapShot: vmToSnapShot
-    snapShotLocation: SourceLocation
+    location: location
   }
 }
 

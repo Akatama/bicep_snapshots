@@ -25,6 +25,7 @@ if(!$csvFileResult)
 
 $sourceSnapshotsBicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/sourceSnapshot.bicep"
 $sourceSnapshotsBicepResult = Test-Path $sourceSnapshotsBicepPath 
+$sourceSnapshotsBicepPath
 if(!$sourceSnapshotsBicepResult)
 {
     Write-Host "Path ${sourceSnapshotsBicepPath} not found!"
@@ -43,13 +44,13 @@ $targetCreateVMBicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/crea
 $targetCreateVMBicepPathResult = Test-Path $targetCreateVMBicepPath
 if(!$targetCreateVMBicepPathResult)
 {
-    Write-Host "Path ${$targetCreateVMBicepPath} not found!"
+    Write-Host "Path ${targetCreateVMBicepPath} not found!"
     exit
 }
 
+$csv = Import-Csv -Path $csvFilePath
 
-
-Import-Csv -Path $csvFilePath | ForEach-Object {
+$csv | ForEach-Object {
     $SourceResourceGroupName = $_.src_rg
     $SourceVMName = $_.src_vm_name
     $SourceSubscriptionName = $_.src_subscription
@@ -67,7 +68,6 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
 
     $targetVmName = "${SourceVMName}-tgt"
 
-
     $sourceSnapshotDeploymentName = "source-${SourceVMName}-snapshots"
 
     $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots"
@@ -75,8 +75,8 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     az account set --subscription $SourceSubscriptionName
 
     az deployment group create --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --template-file $sourceSnapshotsBicepPath --parameters SourceLocation=$SourceLocation SourceVMName=$SourceVMName `
-        SourceSnapshotResourceGroupName=$SourceSnapshotResourceGroupName BaseSnapshotName=$ResourceBaseName
+        --template-file $sourceSnapshotsBicepPath --parameters location=$SourceLocation sourceVMName=$SourceVMName `
+        resourceGroupName=$SourceSnapshotResourceGroupName baseSnapshotName=$ResourceBaseName
 
     $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceOSSnapshotID.value
@@ -115,8 +115,8 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     az account set --subscription $TargetSubscriptionName
 
     az deployment group create --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
-        --template-file $targetSnapshotsBicepPath --parameters TargetLocation=$TargetLocation SourceOSSnapshotID=$sourceOSSnapshotID `
-        SourceDataSnapshotIDs=$sourceDataSnapshotIDs BaseSnapshotName=$ResourceBaseName
+        --template-file $targetSnapshotsBicepPath --parameters location=$TargetLocation osSnapshotID=$sourceOSSnapshotID `
+        dataSnapshotIDs=$sourceDataSnapshotIDs baseSnapshotName=$ResourceBaseName
 
     $targetSnapshotOSName = az deployment group show --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
         --query properties.outputs.targetOSSnapshotName.value
@@ -144,17 +144,18 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
             --query completionPercent
     }
 
-    $targetSnapshotDataNames | ForEach-Object {
-        $dataSnapshotCompletionPercent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
-            --query completionPercent
-        while($dataSnapshotCompletionPercent -ne "100.0")
-        {
-            Write-Output "Waiting 30 seconds for ${$_}"
-            Start-Sleep -Seconds 30
-            $dataSnapshotCompletionPercent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
-                --query completionPercent
-        }
-    }
+    Wait-DataSnapshots -DataSnapshots $targetSnapshotDataNames -ResourceGroupName $TargetResourceGroupName 
+    # $targetSnapshotDataNames | ForEach-Object {
+    #     $dataSnapshotCompletionPercent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
+    #         --query completionPercent
+    #     while($dataSnapshotCompletionPercent -ne "100.0")
+    #     {
+    #         Write-Output "Waiting 30 seconds for ${$_}"
+    #         Start-Sleep -Seconds 30
+    #         $dataSnapshotCompletionPercent = az snapshot show --name $_ --resource-group $TargetResourceGroupName `
+    #             --query completionPercent
+    #     }
+    # }
 
     $dataSnapshotNamesBicep = ConvertTo-BicepArray $targetSnapshotDataNames
     $dataDisksSizeInGBBicep = ConvertTo-BicepArray $dataDisksSizeInGB

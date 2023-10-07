@@ -1,27 +1,38 @@
+@description('Name of the virtual machine that we will create')
 param virtualMachineName string
 
+@description('Size of the created virtual machine (usually the same as the one we took a snapshot of)')
 param vmSize string
 
 param location string = 'East US 2'
 
 //combine these three into an object
+@description('Name of the target location/subscription/resource group OS snapshot')
 param osSnapshotName string
 
+@description('Size in GB of the original OS Disk')
 param osDiskSizeinGB int
 
+@description('SKU of the original OS disk')
 param osDiskSkuName string
 
 // combine these three into an object
+@description('Names of the target local/subscription/resource group Data snasphots')
 param dataSnapshotNames array
 
+@description('Size in GB of the original data disks')
 param dataDisksSizeinGB array
 
+@description('SKU of the original Data disks')
 param dataDisksSkuName array
 
+@description('name of the Vnet we will attach our VM to')
 param vnetName string
 
+@description('Subnet we will attach our VM to')
 param subnetName string
 
+@description('the resource group where the Vnet is located')
 param vnetRG string
 
 resource osSnapshot 'Microsoft.Compute/snapshots@2023-01-02' existing = {

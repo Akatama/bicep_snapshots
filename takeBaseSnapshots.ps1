@@ -57,8 +57,8 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     az account set --subscription $SourceSubscriptionName
 
     az deployment group create --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --template-file $sourceSnapshotsBicepPath --parameters SourceLocation=$SourceLocation SourceVMName=$SourceVMName `
-        SourceSnapshotResourceGroupName=$SourceSnapshotResourceGroupName BaseSnapshotName=$ResourceBaseName
+        --template-file $sourceSnapshotsBicepPath --parameters location=$SourceLocation sourceVMName=$SourceVMName `
+        resourceGroupName=$SourceSnapshotResourceGroupName baseSnapshotName=$ResourceBaseName
 
     $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceOSSnapshotID.value
@@ -79,6 +79,6 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
     az account set --subscription $TargetSubscriptionName
 
     az deployment group create --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
-        --template-file $targetSnapshotsBicepPath --parameters TargetLocation=$TargetLocation SourceOSSnapshotID=$sourceOSSnapshotID `
-        SourceDataSnapshotIDs=$sourceDataSnapshotIDs BaseSnapshotName=$ResourceBaseName
+        --template-file $targetSnapshotsBicepPath --parameters location=$TargetLocation osSnapshotID=$sourceOSSnapshotID `
+        dataSnapshotIDs=$sourceDataSnapshotIDs baseSnapshotName=$ResourceBaseName
 }

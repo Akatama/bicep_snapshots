@@ -1,18 +1,20 @@
 @description('First part of the name of the snapshot resources')
-param BaseSnapshotName string = 'snapshot'
+param baseSnapshotName string = 'snapshot'
 
-param TargetLocation string = 'East US 2'
+param location string = 'East US 2'
 
-param SourceOSSnapshotID string
+@description('The Azure ID of the source location/subscription/resource group OS snapshot')
+param osSnapshotID string
 
-param SourceDataSnapshotIDs array
+@description('The Azure IDs of the source location/subscription/resource group Data snapshots')
+param dataSnapshotIDs array
 
-var TargetSnapshotName = 'target-${BaseSnapshotName}'
+var targetSnapshotName = 'target-${baseSnapshotName}'
 
 
 resource targetSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
-  location: TargetLocation
-  name: '${TargetSnapshotName}-OS'
+  location: location
+  name: '${targetSnapshotName}-OS'
   sku: {
     name: 'Standard_ZRS'
   }
@@ -23,7 +25,7 @@ resource targetSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
   properties: {
     osType: 'Windows'
     creationData: {
-      sourceResourceId: SourceOSSnapshotID
+      sourceResourceId: osSnapshotID
       createOption: 'CopyStart'
     }
     incremental: true
@@ -31,9 +33,9 @@ resource targetSnapshotOSDisk 'Microsoft.Compute/snapshots@2023-01-02' = {
 }
 
 
-resource targetSnapshotDataDisks 'Microsoft.Compute/snapshots@2023-01-02' = [for (dataSnapShotID, i) in SourceDataSnapshotIDs : {
-  location: TargetLocation
-  name: '${TargetSnapshotName}-Data-${i}'
+resource targetSnapshotDataDisks 'Microsoft.Compute/snapshots@2023-01-02' = [for (dataSnapShotID, i) in dataSnapshotIDs : {
+  location: location
+  name: '${targetSnapshotName}-Data-${i}'
   sku: {
     name: 'Standard_ZRS'
   }
@@ -53,4 +55,4 @@ resource targetSnapshotDataDisks 'Microsoft.Compute/snapshots@2023-01-02' = [for
 
 output targetOSSnapshotName string = targetSnapshotOSDisk.name
 
-output targetDataSnapshotNames array = [ for i in range (0, length(SourceDataSnapshotIDs)) : targetSnapshotDataDisks[i].name]
+output targetDataSnapshotNames array = [ for i in range (0, length(dataSnapshotIDs)) : targetSnapshotDataDisks[i].name]
