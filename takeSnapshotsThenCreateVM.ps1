@@ -84,20 +84,32 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
         --query properties.outputs.sourceDataSnapshotIDs.value
     $vmSize = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.vmSize.value
-    $osDiskSizeinGB = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --query properties.outputs.osDiskSizeinGB.value
-    $osDiskSkuName = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --query properties.outputs.osDiskSkuName.value
 
     $sourceDataSnapshotIDs = ConvertTo-BicepArray -ArrayToConvert $dataSnapshotIds
 
-    # $vm = az vm show --resource-group $SourceResourceGroupName --name $SourceVMName
-    # $dataDiskNames = @()
-    # $vm
-    # $dataDisksSizeInGB = @()
-    # $dataDisksSkuName = @()
+    $sourceOSDiskName = az vm show --resource-group $SourceResourceGroupName --name $SourceVMName --query storageProfile.osDisk.name
+    $osDiskSizeinGB = az disk show --resource-group $SourceResourceGroupName --name $sourceOSDiskName --query diskSizeGB
+    $osDiskSkuName = az disk show --resource-group $SourceResourceGroupName --name $sourceOSDiskName --query sku.name
+    
 
+    $dataDiskNames = @()
+    az vm show --resource-group $SourceResourceGroupName --name $SourceVMName --query storageProfile.dataDisks[*].name | ForEach-Object {
+        if($_ -ne "[" -and $_ -ne "]")
+        {
+            $dataDiskName = $_.trim().trim(",")
+            $dataDiskNames += $dataDiskName
+        }
+    }
+    
+    $dataDisksSizeInGB = @()
+    $dataDisksSkuName = @()
+    $dataDiskNames | ForEach-Object {
+        $dataDisksSizeInGB += az disk show --resource-group $SourceResourceGroupName --name $_ --query diskSizeGB
+        $dataDisksSkuName += az disk show --resource-group $SourceResourceGroupName --name $_ --query sku.name
 
+    }
+
+    Write-Output "Sleeping for 120 seconds"
     Start-Sleep 120
 
     az account set --subscription $TargetSubscriptionName
