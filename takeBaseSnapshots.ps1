@@ -10,6 +10,9 @@ param (
     [Parameter(Mandatory=$true)][string]$CsvRelativePath
 )
 
+## Internal Functions
+. (Join-Path $PSScriptRoot functions.ps1)
+
 $csvFilePath = Join-Path -Path $PSScriptRoot -ChildPath $CsvRelativePath
 $csvFileResult = Test-Path $csvFilePath
 if(!$csvFileResult)
@@ -34,9 +37,11 @@ if(!$targetSnapshotsBicepResult)
     exit
 }
 
+#Get the function definition as a string
+$converToBicepArray = ${function:ConvertTo-BicepArray}.ToString()
 
-
-Import-Csv -Path $csvFilePath | ForEach-Object {
+$csv = Import-Csv -Path $csvFilePath
+$csv | ForEach-Object -ThrottleLimit $csv.Count -Parallel {
     $SourceResourceGroupName = $_.src_rg
     $SourceVMName = $_.src_vm_name
     $SourceSubscriptionName = $_.src_subscription
@@ -54,31 +59,28 @@ Import-Csv -Path $csvFilePath | ForEach-Object {
 
     $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots-base"
 
+    # define the functions inside of the thread
+    ${function:ConvertTo-BicepArray} = $using:converToBicepArray
+
     az account set --subscription $SourceSubscriptionName
 
     az deployment group create --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --template-file $sourceSnapshotsBicepPath --parameters location=$SourceLocation sourceVMName=$SourceVMName `
+        --template-file $using:sourceSnapshotsBicepPath --parameters location=$SourceLocation sourceVMName=$SourceVMName `
         resourceGroupName=$SourceSnapshotResourceGroupName baseSnapshotName=$ResourceBaseName
 
     $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceOSSnapshotID.value
     $sourceDataSnapshotIDs = "["
-    $snapshotIds = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
+    $dataSnapshotIds = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
         --query properties.outputs.sourceDataSnapshotIDs.value 
-    $snapshotIds | ForEach-Object {
-        if ($_ -ne "[" -and $_ -ne "]")
-        {
-            $dataDiskId = $_.trim().trim(",", "`"")
-            $dataDiskId = -join("`'", $dataDiskId, "`'", ",")
-            $sourceDataSnapshotIDs = -join($sourceDataSnapshotIDs, $dataDiskId)
-        }
-    }
-    $sourceDataSnapshotIDs = $sourceDataSnapshotIDs.trim(",")
-    $sourceDataSnapshotIDs = -join($sourceDataSnapshotIDs, "]")
+    $sourceDataSnapshotIDs = ConvertTo-BicepArray -ArrayToConvert $dataSnapshotIds
 
+    Write-Output "Sleeping for 120 seconds"
+    Start-Sleep 120
+    
     az account set --subscription $TargetSubscriptionName
 
     az deployment group create --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
-        --template-file $targetSnapshotsBicepPath --parameters location=$TargetLocation osSnapshotID=$sourceOSSnapshotID `
+        --template-file $using:targetSnapshotsBicepPath --parameters location=$TargetLocation osSnapshotID=$sourceOSSnapshotID `
         dataSnapshotIDs=$sourceDataSnapshotIDs baseSnapshotName=$ResourceBaseName
 }

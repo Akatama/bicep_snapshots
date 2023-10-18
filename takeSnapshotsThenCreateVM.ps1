@@ -25,7 +25,6 @@ if(!$csvFileResult)
 
 $sourceSnapshotsBicepPath = Join-Path -Path $PSScriptRoot -ChildPath "/bicep/sourceSnapshot.bicep"
 $sourceSnapshotsBicepResult = Test-Path $sourceSnapshotsBicepPath 
-$sourceSnapshotsBicepPath
 if(!$sourceSnapshotsBicepResult)
 {
     Write-Host "Path ${sourceSnapshotsBicepPath} not found!"
@@ -48,9 +47,13 @@ if(!$targetCreateVMBicepPathResult)
     exit
 }
 
+#Get the functions definition as a string
+$converToBicepArray = ${function:ConvertTo-BicepArray}.ToString()
+$waitDataSnapshots = ${function:Wait-DataSnapshots}.ToString()
+
 $csv = Import-Csv -Path $csvFilePath
 
-$csv | ForEach-Object {
+$csv | ForEach-Object -ThrottleLimit $csv.Count -Parallel {
     $SourceResourceGroupName = $_.src_rg
     $SourceVMName = $_.src_vm_name
     $SourceSubscriptionName = $_.src_subscription
@@ -72,10 +75,14 @@ $csv | ForEach-Object {
 
     $targetSnapshotDeploymentName = "target-${SourceVMName}-snapshots"
     
+    # define the functions inside of the thread
+    ${function:ConvertTo-BicepArray} = $using:converToBicepArray
+    ${function:Wait-DataSnapshots} = $using:waitDataSnapshots
+
     az account set --subscription $SourceSubscriptionName
 
     az deployment group create --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
-        --template-file $sourceSnapshotsBicepPath --parameters location=$SourceLocation sourceVMName=$SourceVMName `
+        --template-file $using:sourceSnapshotsBicepPath --parameters location=$SourceLocation sourceVMName=$SourceVMName `
         resourceGroupName=$SourceSnapshotResourceGroupName baseSnapshotName=$ResourceBaseName
 
     $sourceOSSnapshotID = az deployment group show --resource-group $SourceResourceGroupName --name $sourceSnapshotDeploymentName `
@@ -115,7 +122,7 @@ $csv | ForEach-Object {
     az account set --subscription $TargetSubscriptionName
 
     az deployment group create --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
-        --template-file $targetSnapshotsBicepPath --parameters location=$TargetLocation osSnapshotID=$sourceOSSnapshotID `
+        --template-file $using:targetSnapshotsBicepPath --parameters location=$TargetLocation osSnapshotID=$sourceOSSnapshotID `
         dataSnapshotIDs=$sourceDataSnapshotIDs baseSnapshotName=$ResourceBaseName
 
     $targetSnapshotOSName = az deployment group show --resource-group $TargetResourceGroupName --name $targetSnapshotDeploymentName `
@@ -161,7 +168,7 @@ $csv | ForEach-Object {
     $dataDisksSizeInGBBicep = ConvertTo-BicepArray $dataDisksSizeInGB
     $dataDisksSkuNameBicep = ConvertTo-BicepArray $dataDisksSkuName
 
-    az deployment group create --resource-group $TargetResourceGroupName --name "${targetVmName}-deploy" --template-file $targetCreateVMBicepPath `
+    az deployment group create --resource-group $TargetResourceGroupName --name "${targetVmName}-deploy" --template-file $using:targetCreateVMBicepPath `
     --parameters virtualMachineName=$targetVmName vmSize=$vmSize osSnapshotName=$targetSnapshotOSName osDiskSizeinGB=$osDiskSizeinGB `
     osDiskSkuName=$osDiskSkuName dataSnapshotNames=$dataSnapshotNamesBicep dataDisksSizeinGB=$dataDisksSizeInGBBicep `
     dataDisksSkuName=$dataDisksSkuNameBicep vnetName=$TargetVNetName subnetName=$TargetSubnetName vnetRG=$TargetVNetResourceGroupName
