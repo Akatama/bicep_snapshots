@@ -4,8 +4,9 @@ The imagined use case for this would be for disaster recovery, especially if you
 
 I don't recommend doing this with Bicep. It was a fun project, but it is much easier with just PowerShell.
 There are two main reasons for this:
-    1. You cannot create the snapshots in the source region/subscription, then immediately copy them in the same bicep file.
-    2. Bicep will not wait for the snapshots to be hydrated before re-creating the disks, so you need to do the waiting in PowerShell or Bash anyway.
+1. You cannot create the snapshots in the source region/subscription, then immediately copy them in the same bicep file.
+2. Bicep will not wait for the snapshots to be hydrated before re-creating the disks, so you need to do the waiting in PowerShell or Bash anyway.
+   
 Because of this, you cannot truly do this only in Bicep, you must use both Bicep and PowerShell or Bash. 
 
 There are three PowerShell files in this solution.
